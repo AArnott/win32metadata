@@ -16,6 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Windows.Sdk.PInvoke.CSharp" Version="0.1.269-beta-gf60650620c" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Windows.Sdk.PInvoke.CSharp" Version="0.1.378-beta" PrivateAssets="all" />
   </ItemGroup>
 </Project>

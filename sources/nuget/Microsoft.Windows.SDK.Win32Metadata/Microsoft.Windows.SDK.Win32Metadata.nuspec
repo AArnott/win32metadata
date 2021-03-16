@@ -9,16 +9,19 @@
     <copyright>© Microsoft Corporation. All rights reserved.</copyright>
     <summary>This packages provides the Win32 API surface as a winmd (Windows metadata) file.</summary>
     <description>This packages provides the Win32 API surface as a winmd (Windows metadata) file. It is intended to be used as the basis for generating language-specific projections. It is not loadable as a CLR assembly.</description>
-    <projectUrl>https://aka.ms/WinSDKProjectURL</projectUrl>
+    <releaseNotes>https://github.com/microsoft/win32metadata/releases/tag/v$version$</releaseNotes>
+    <projectUrl>https://github.com/microsoft/win32metadata</projectUrl>
     <tags>Win32 Metadata</tags>
     <licenseUrl>https://aka.ms/WinSDKPreviewLicenseURL</licenseUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <iconUrl>https://aka.ms/WinSDKIconURL</iconUrl>
+    <repository type="git" url="https://github.com/microsoft/win32metadata.git" />
   </metadata>
 
   <files>
-      <file src="bin\Windows.Win32.winmd" target="content"/>
-      <file src="bin\Windows.Win32.Interop.dll" target="content"/>
-      <file src="build\Microsoft.Windows.SDK.Win32Metadata.props" target="build\"/>
+      <file src="bin\Windows.Win32.winmd" target=""/>
+      <file src="bin\Windows.Win32.Interop.dll" target=""/>
+      <file src="buildTransitive\**" target="buildTransitive\"/>
+      <file src="buildTransitive\**" target="build\"/>
   </files>
 </package>

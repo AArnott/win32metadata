@@ -10,7 +10,7 @@ namespace ClangSharpSourceToWinmd
 {
     public static class EncodeHelpers
     {
-        private static readonly System.Text.RegularExpressions.Regex RemappedParmRegex = new System.Text.RegularExpressions.Regex(@"(?:\[([^\]]*)\])?(?:\s*(\w+)(?:\s+(\w+))?)?");
+        private static readonly System.Text.RegularExpressions.Regex RemappedParmRegex = new System.Text.RegularExpressions.Regex(@"(?:\[([^\]]*)\])?(?:\s*(\w+\**)(?:\s+(\w+))?)?");
         private static readonly System.Text.RegularExpressions.Regex AttributeRegex = new System.Text.RegularExpressions.Regex(@"(\w+)(\([^\)]+\))?");
 
         public static bool DecodeRemap(string remappedTo, out List<AttributeSyntax> listAttributes, out string newType, out string newName)
@@ -69,6 +69,21 @@ namespace ClangSharpSourceToWinmd
             }
 
             return text;
+        }
+
+        public static uint ParseHex(string text)
+        {
+            if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                text = text.Substring(2);
+            }
+
+            if (char.ToUpperInvariant(text[text.Length - 1]) == 'L')
+            {
+                text = text.Substring(0, text.Length - 1);
+            }
+
+            return uint.Parse(text, System.Globalization.NumberStyles.HexNumber);
         }
 
         public static void TypedConstant(this LiteralEncoder encoder, TypedConstant constant)
@@ -269,6 +284,24 @@ namespace ClangSharpSourceToWinmd
             {
                 argumentsEncoder.AddArgument().TypedConstant(argument);
             }
+        }
+
+        public static AttributeListSyntax ConvertGuidToAttributeList(Guid guid)
+        {
+            // Outputs in format: {0x00000000,0x0000,0x0000,{0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}}
+            string formattedGuid = guid.ToString("x");
+
+            // Get rid of leading { and trailing }}
+            formattedGuid = formattedGuid.Substring(1, formattedGuid.Length - 3);
+            // There's one more { we need to get rid of
+            formattedGuid = formattedGuid.Replace("{", string.Empty);
+            string args = $"({formattedGuid})";
+            return
+                SyntaxFactory.AttributeList(
+                    SyntaxFactory.SingletonSeparatedList<AttributeSyntax>(
+                        SyntaxFactory.Attribute(
+                            SyntaxFactory.ParseName("Windows.Win32.Interop.Guid"),
+                            SyntaxFactory.ParseAttributeArgumentList(args))));
         }
     }
 }

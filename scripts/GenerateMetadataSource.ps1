@@ -11,6 +11,15 @@ param
     $downloadDefaultCppNugets = $true,
 
     [string]
+    $downloadNugetVersion,
+
+    [string]
+    $publishNugetVersion,
+
+    [bool]
+    $exitAfterFindVersion = $false,
+
+    [string]
     $patch = ""
 )
 
@@ -47,11 +56,14 @@ function Replace-Text
 
 if (!$artifactsDir)
 {
-    $artifactsDir = "$rootDir\artifacts"
-    Create-Directory $artifactsDir
+    $artifactsDir = $defaultArtifactsDir
 }
 
-Write-Host "Making sure cpp NuGet packages are installed..."
+Create-Directory $artifactsDir
+
+Write-Output "`e[36m*** Generating source files`e[0m"
+
+Write-Output "Making sure cpp NuGet packages are installed..."
 
 $nugetSrcPackagesDir = Join-Path -Path $artifactsDir "NuGetPackages"
 Create-Directory $nugetSrcPackagesDir
@@ -63,76 +75,94 @@ $branch = $parts[2].Replace("_", "-")
 $potentialVersions = "10.0.$build.$qfe-preview.$branch", "10.0.$build.$qfe-preview", "10.0.$build.*"
 $version = $null
 
+if ($downloadNugetVersion)
+{
+    $potentialVersions = $downloadNugetVersion
+}
+
 foreach ($ver in $potentialVersions)
 {
-    Write-Host "Looking for: $nugetSrcPackagesDir\Microsoft.Windows.SDK.CPP.$ver.nupkg..."
+    Write-Output "Looking for: $nugetSrcPackagesDir\Microsoft.Windows.SDK.CPP.$ver.nupkg..."
     $cppPkg = Get-ChildItem -path $nugetSrcPackagesDir -Include Microsoft.Windows.SDK.CPP.$ver.nupkg -recurse
     if ($cppPkg)
     {
         $version = $cppPkg.BaseName.Substring("Microsoft.Windows.SDK.CPP.".Length)
-        Write-Host "Found NuGet package, version: $version"
+        Write-Output "Found NuGet package, version: $version"
         break;
     }
 }
 
 if (!$version)
 {
-    if (!$downloadDefaultCppNugets)
+    if ($downloadNugetVersion)
     {
-        Write-Host "Error: Couldn't find cpp package in $nugetSrcPackagesDir. Call script with downloadDefaultCppNugets = 1 to download default packages."
-        exit -1
+        $version = $downloadNugetVersion
     }
-    else
+    else 
     {
-        $version = $defaultWinSDKNugetVersion
-        Write-Host "No cpp nuget packages found at $nugetSrcPackagesDir. Downloading $version from nuget.org..."
+        if (!$downloadDefaultCppNugets)
+        {
+            Write-Output "Error: Couldn't find cpp package in $nugetSrcPackagesDir. Call script with downloadDefaultCppNugets = 1 to download default packages."
+            exit -1
+        }
 
-        Download-Nupkg "Microsoft.Windows.SDK.CPP" $version $nugetSrcPackagesDir
-        Download-Nupkg "Microsoft.Windows.SDK.CPP.x64" $version $nugetSrcPackagesDir
-        $cppPkg = Get-ChildItem -path $nugetSrcPackagesDir -Include Microsoft.Windows.SDK.CPP.10.*.nupkg -recurse
+        $version = $defaultWinSDKNugetVersion
     }
+
+    Write-Output "No cpp nuget packages found at $nugetSrcPackagesDir. Downloading $version from nuget.org..."
+
+    Download-Nupkg "Microsoft.Windows.SDK.CPP" $version $nugetSrcPackagesDir
+    Download-Nupkg "Microsoft.Windows.SDK.CPP.x64" $version $nugetSrcPackagesDir
 }
 
 $nugetSrcPackagesDir = Join-Path -Path $artifactsDir "NuGetPackages"
 Create-Directory $nugetSrcPackagesDir
 
-$publishNugetVersion = $version
-
-# patch is an auto-increment counter specific to the pipeline name.
-# If it's set...
-if ($patch -ne "")
+if (!$publishNugetVersion)
 {
-    # If this is a preview build, just append the patch to the end of the version
-    if ($version.Contains("-preview"))
-    {
-        $publishNugetVersion = "$version.$patch"
-    }
-    # If this isn't a preview build, we want to replace the build QFE with the patch
-    else
-    {
-        $buildParts = $version.Split("{.}")
-        $qfePart = $buildParts[3]
-        $qfeParts = $qfePart.Split("{-}")
-        $qfe = $qfeOverride
-        if ($qfeParts.Length -eq 2)
-        {
-            $qfeExtra = $qfeParts[1]
-            $qfe = "$qfe-$qfeExtra"
-        }
-    
-        $buildParts[3] = $patch
+    $publishNugetVersion = $version
 
-        $publishNugetVersion = [string]::Join(".", $buildParts)
+    # patch is an auto-increment counter specific to the pipeline name.
+    # If it's set...
+    if ($patch -ne "")
+    {
+        # If this is a preview build, just append the patch to the end of the version
+        if ($version.Contains("-preview"))
+        {
+            $publishNugetVersion = "$version.$patch"
+        }
+        # If this isn't a preview build, we want to replace the build QFE with the patch
+        else
+        {
+            $buildParts = $version.Split("{.}")
+            $qfePart = $buildParts[3]
+            $qfeParts = $qfePart.Split("{-}")
+            $qfe = $qfeOverride
+            if ($qfeParts.Length -eq 2)
+            {
+                $qfeExtra = $qfeParts[1]
+                $qfe = "$qfe-$qfeExtra"
+            }
+        
+            $buildParts[3] = $patch
+    
+            $publishNugetVersion = [string]::Join(".", $buildParts)
+        }
     }
 }
 
 # Write variable in the Azure DevOps pipeline for use in subsequent tasks
-Write-Host "##vso[task.setvariable variable=PrepOutput.NugetVersion;]$publishNugetVersion"
+Write-Output "##vso[task.setvariable variable=PrepOutput.NugetVersion;]$publishNugetVersion"
+
+if ($exitAfterFindVersion)
+{
+    exit 0
+}
 
 $x64Pkg = Get-ChildItem -path "$nugetSrcPackagesDir\Microsoft.Windows.SDK.CPP.x64.$version.nupkg"
 if (!$x64Pkg)
 {
-    Write-Host "Error: Couldn't find cpp x64 package: $x64Pkg."
+    Write-Output "Error: Couldn't find cpp x64 package: $x64Pkg."
     exit -1
 }
 
@@ -140,16 +170,61 @@ $nugetDestPackagesDir = Join-Path -Path $artifactsDir "InstalledPackages"
 Create-Directory $nugetDestPackagesDir
 & $toolsDir\nuget.exe install Microsoft.Windows.SDK.CPP.x64 -version $version -source $nugetSrcPackagesDir -OutputDirectory $nugetDestPackagesDir
 
-Write-Host "`n`nProcessing each supported lib name...`n"
+# Clean up directory where generated source files go
+Create-Directory $sdkGeneratedSourceDir
+Remove-Item "$sdkGeneratedSourceDir\*.cs"
 
-$libNames = Get-ChildItem $importLibsDir | select -ExpandProperty Name
-# $libNames = @("ole32", "onecoreuap", "d3d11", "d3d12", "d3dcompiler")
+Invoke-PrepLibMappingsFile $artifactsDir $version
+Invoke-RecompileMidlHeaders $artifactsDir $version
 
-foreach ($libName in $libNames)
+& $PSScriptRoot\CreateScraperRspForAutoTypes.ps1
+& $PSScriptRoot\CreateRspsForFunctionPointerFixups.ps1
+
+$throttleCount = [System.Environment]::ProcessorCount / 2
+if ($throttleCount -lt 2)
 {
-    Write-Host "Calling $PSScriptRoot\GenerateMetadataSourceForLib.ps1 -version $version -libName $libName -artifactsDir $artifactsDir..."
-    & $PSScriptRoot\GenerateMetadataSourceForLib.ps1 -version $version -libName $libName -artifactsDir $artifactsDir
-    Write-Host
+    $throttleCount = 2
 }
+
+$partitionNames = Get-ChildItem $partitionsDir | Select-Object -ExpandProperty Name
+
+$stopwatch =  [system.diagnostics.stopwatch]::StartNew()
+
+Write-Output "`nProcessing each partition...using $throttleCount parallel script(s)"
+
+$errObj = new-object psobject
+Add-Member -InputObject $errObj -MemberType NoteProperty -Name ErrorCode -Value 0
+
+$partitionNames | ForEach-Object -Parallel {
+    $localObj = $using:errObj
+    if ($localObj.ErrorCode -ne 0)
+    {
+        continue
+    }
+
+    $out1 = "`n$using:PSScriptRoot\GenerateMetadataSourceForPartition.ps1 -version $using:version -partitionName $_ -artifactsDir $using:artifactsDir..."
+    $out2 = & $using:PSScriptRoot\GenerateMetadataSourceForPartition.ps1 -version $using:version -partitionName $_ -artifactsDir $using:artifactsDir -indent "`n  "
+    Write-Output "$out1$out2"
+
+    if ($LastExitCode -lt 0)
+    {
+        Write-Error "Partition $_ failed."
+        $localObj.ErrorCode = $LastExitCode
+    }
+    
+} -ThrottleLimit $throttleCount
+
+if ($errObj.ErrorCode -ne 0)
+{
+    Write-Error "Failed to scrape one or more partitions."
+    exit $errObj.ErrorCode
+}
+
+$stopwatch.Stop()
+$totalTime = $stopwatch.Elapsed.ToString("c")
+
+Write-Output "Total time taken for all partitions: $totalTime"
+
+Write-Output "`n`e[32mGenerating source files succeeded`e[0m"
 
 exit 0

@@ -1,2 +1,0 @@
-// Copyright © Microsoft
-using Windows.Win32.Interop;
